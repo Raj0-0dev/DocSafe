@@ -1,17 +1,6 @@
-"""
-DocSafe: Training & Evaluation Metrics Engine
-=================================================
-Submodule 5.3: Metric Evaluation Engine for Tamper Localization.
-Computes pixel-level and image-level forensic performance indicators:
-1. Pixel-level: Precision, Recall, F1/Dice Score, Intersection-over-Union (IoU), Specificity.
-2. Image-level: Clean Image False Positive Rate (FPR), Tamper Detection Rate (TPR).
-3. Streaming Accumulator: TamperMetricsEvaluator for evaluating large validation/test sets without OOM.
-"""
-
 from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import torch
-
 
 def compute_pixel_metrics(
     pred: Union[torch.Tensor, np.ndarray],
@@ -19,24 +8,6 @@ def compute_pixel_metrics(
     threshold: float = 0.5,
     eps: float = 1e-7,
 ) -> Dict[str, float]:
-    """
-    Compute pixel-level segmentation metrics between prediction and ground truth.
-    
-    Args:
-        pred: Predicted probability map in [0, 1] (Tensor or ndarray).
-        target: Ground truth binary mask {0, 1} (Tensor or ndarray).
-        threshold: Binarization decision cutoff (default: 0.5).
-        eps: Small epsilon to prevent zero-division.
-        
-    Returns:
-        Dictionary containing:
-        - 'precision': TP / (TP + FP)
-        - 'recall': TP / (TP + FN)
-        - 'f1': 2 * TP / (2 * TP + FP + FN) (Dice)
-        - 'iou': TP / (TP + FP + FN) (Jaccard)
-        - 'specificity': TN / (TN + FP)
-        - 'accuracy': (TP + TN) / Total
-    """
     if isinstance(pred, torch.Tensor):
         pred_arr = pred.detach().cpu().numpy()
     else:
@@ -47,7 +18,6 @@ def compute_pixel_metrics(
     else:
         target_arr = np.asarray(target)
 
-    # Flatten arrays
     p_bin = (pred_arr >= threshold).astype(np.uint8).ravel()
     t_bin = (target_arr >= 0.5).astype(np.uint8).ravel()
 
@@ -66,7 +36,6 @@ def compute_pixel_metrics(
     specificity = (tn + eps) / (tn + fp + eps)
     accuracy = (tp + tn) / total
 
-    # Special handling when target has zero tampered pixels (clean negative sample)
     if (tp + fn) == 0.0:
         if fp == 0.0:
             precision = 1.0
@@ -92,26 +61,12 @@ def compute_pixel_metrics(
         "tn": int(tn),
     }
 
-
 def compute_image_level_decision(
     pred: Union[torch.Tensor, np.ndarray],
     target: Union[torch.Tensor, np.ndarray],
     pixel_threshold: float = 0.5,
     min_tampered_pixels: int = 16,
 ) -> Dict[str, Union[bool, float]]:
-    """
-    Determine image-level authenticity status (tampered vs authentic).
-    Filters isolated noise speckles by requiring a connected/clustered pixel count.
-    
-    Args:
-        pred: Predicted probability map (H, W) or (1, H, W).
-        target: Ground truth mask (H, W) or (1, H, W).
-        pixel_threshold: Pixel probability threshold.
-        min_tampered_pixels: Minimum positive pixels needed to flag entire image as tampered.
-        
-    Returns:
-        Dict with 'is_tampered_pred', 'is_tampered_true', 'is_correct'.
-    """
     if isinstance(pred, torch.Tensor):
         p_arr = pred.detach().cpu().numpy()
     else:
@@ -136,12 +91,7 @@ def compute_image_level_decision(
         "true_tampered_pixels": true_tampered_pixels,
     }
 
-
 class TamperMetricsEvaluator:
-    """
-    Streaming metric accumulator for batch-wise evaluation across entire datasets.
-    Maintains aggregate statistics without holding all test predictions in memory.
-    """
 
     def __init__(self, threshold: float = 0.5, min_tampered_pixels: int = 16):
         self.threshold = threshold
@@ -149,7 +99,6 @@ class TamperMetricsEvaluator:
         self.reset()
 
     def reset(self) -> None:
-        """Reset internal accumulator state."""
         self.total_tp = 0
         self.total_fp = 0
         self.total_fn = 0
@@ -168,13 +117,6 @@ class TamperMetricsEvaluator:
         preds: Union[torch.Tensor, np.ndarray],
         targets: Union[torch.Tensor, np.ndarray],
     ) -> None:
-        """
-        Ingest a batch of predictions and ground truths into running statistics.
-        
-        Args:
-            preds: (B, 1, H, W) or (B, H, W) predictions.
-            targets: (B, 1, H, W) or (B, H, W) ground truth masks.
-        """
         if isinstance(preds, torch.Tensor):
             preds_arr = preds.detach().cpu().numpy()
         else:
@@ -198,7 +140,6 @@ class TamperMetricsEvaluator:
             self.total_tn += m["tn"]
             self.sample_ious.append(m["iou"])
 
-            # Image-level audit
             img_dec = compute_image_level_decision(
                 p_i, t_i,
                 pixel_threshold=self.threshold,
@@ -215,13 +156,6 @@ class TamperMetricsEvaluator:
                     self.tampered_images_detected += 1
 
     def compute(self, eps: float = 1e-7) -> Dict[str, float]:
-        """
-        Compute final aggregated dataset metrics.
-        
-        Returns:
-            Dictionary with aggregated pixel precision, recall, f1, iou,
-            clean false positive rate (clean_fpr), and tamper detection rate (tpr).
-        """
         tp = float(self.total_tp)
         fp = float(self.total_fp)
         fn = float(self.total_fn)

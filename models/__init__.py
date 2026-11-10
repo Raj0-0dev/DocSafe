@@ -1,9 +1,3 @@
-"""
-DocSafe Models Engine
-========================
-High-frequency residual extraction, phase coherence fusion, and Deep Learning U-Net detector.
-"""
-
 from docsafe.models.residual import (
     HighFrequencyResidualExtractor,
     PhaseCoherenceFusionLayer,

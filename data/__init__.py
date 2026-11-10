@@ -1,10 +1,3 @@
-"""
-DocSafe Data Engine
-======================
-Multi-domain dataset loading, synthetic tamper attacks, channel distortions,
-and PyTorch DataLoaders.
-"""
-
 from docsafe.data.dataset import (
     ImageLoader,
     TamperDetectionDataset,

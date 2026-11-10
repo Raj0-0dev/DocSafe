@@ -1,21 +1,26 @@
-"""
-DocSafe: Zero-Reference Verification Engine & CLI
-====================================================
-Submodule 6.2: Inspects questioned images with ZERO reference to the original image.
-- Demodulates high-frequency residuals against keyed carrier lattice
-- Runs DocSafeUNetDetector to predict tamper probability heatmap
-- Extracts precise bounding boxes around manipulated characters/regions
-- Generates 4-panel forensic diagnostic proof boards and JSON audit reports
-"""
-
 import argparse
 import io
 import json
 import os
 import sys
 import time
+import types
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+
+CUR_DIR = Path(__file__).resolve().parent
+ROOT_DIR = CUR_DIR.parent
+for p in [str(ROOT_DIR), str(ROOT_DIR.parent)]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+if "docsafe" not in sys.modules:
+    try:
+        import docsafe
+    except ModuleNotFoundError:
+        _pkg = types.ModuleType("docsafe")
+        _pkg.__path__ = [str(ROOT_DIR)]
+        sys.modules["docsafe"] = _pkg
 
 import cv2
 import numpy as np
@@ -25,11 +30,7 @@ from docsafe.core.lattice import generate_carrier_lattice, derive_key_seed
 from docsafe.core.pdf_engine import PDFEngine, DEFAULT_PDF_DPI
 from docsafe.models.unet_detector import DocSafeUNetDetector
 
-
 class VerificationEngine:
-    """
-    Submodule 6.2: Production Zero-Reference Tamper Verification Engine.
-    """
 
     def __init__(
         self,
@@ -55,19 +56,16 @@ class VerificationEngine:
         else:
             self.device = device
 
-        # Instantiate UNet detector
         self.model = DocSafeUNetDetector(
             in_fused_channels=8,
             encoder_dims=(32, 64, 128, 256),
             decoder_out_dim=32,
         ).to(self.device)
 
-        # Load weights if checkpoint provided with bidirectional key compatibility
         if checkpoint_path is not None and Path(checkpoint_path).exists():
             ckpt = torch.load(checkpoint_path, map_location=self.device)
             raw_state_dict = ckpt.get("model_state_dict", ckpt)
 
-            # Determine whether the in-memory model uses 'final_conv' or legacy 'final_up'
             model_keys = set(self.model.state_dict().keys())
             has_final_conv = any("decoder.final_conv" in k for k in model_keys)
 
@@ -75,13 +73,11 @@ class VerificationEngine:
             for k, v in raw_state_dict.items():
                 new_k = k
                 if has_final_conv:
-                    # Target expects final_conv: remap final_up -> final_conv
                     if "decoder.final_up.1." in new_k:
                         new_k = new_k.replace("decoder.final_up.1.", "decoder.final_conv.0.")
                     elif "decoder.final_up.2." in new_k:
                         new_k = new_k.replace("decoder.final_up.2.", "decoder.final_conv.1.")
                 else:
-                    # Target expects legacy final_up: remap final_conv -> final_up
                     if "decoder.final_conv.0." in new_k:
                         new_k = new_k.replace("decoder.final_conv.0.", "decoder.final_up.1.")
                     elif "decoder.final_conv.1." in new_k:
@@ -104,28 +100,8 @@ class VerificationEngine:
         self,
         image_input: Union[str, Path, np.ndarray],
     ) -> Dict:
-        """
-        Perform zero-reference tamper verification on a questioned image.
-        
-        Args:
-            image_input: File path or NumPy uint8 BGR array.
-            
-        Returns:
-            Dictionary containing:
-            - 'is_tampered': bool
-            - 'status': 'TAMPERED' or 'AUTHENTIC'
-            - 'tampered_pixels': int
-            - 'confidence': float
-            - 'bboxes': list of dicts with [x, y, w, h, confidence]
-            - 'prob_heatmap': 2D float32 array in [0, 1]
-            - 'original_bgr': original image
-            - 'residual': high-frequency residual
-            - 'coherence': demodulation coherence map
-            - 'annotated_bgr': image with drawn red bounding boxes
-        """
         t0 = time.time()
 
-        # 1. Load Image
         if isinstance(image_input, (str, Path)):
             in_p = Path(image_input)
             if not in_p.exists():
@@ -138,8 +114,6 @@ class VerificationEngine:
 
         h, w = img_bgr.shape[:2]
 
-        # 1. Native Resolution Cryptographic Carrier Demodulation (Always unscaled)
-        # Guarantees period-8 carrier lattice is NEVER destroyed by image resizing
         native_carrier = generate_carrier_lattice(
             height=h,
             width=w,
@@ -148,7 +122,6 @@ class VerificationEngine:
             channels=1,
         ).squeeze()
 
-        # Check Chroma (Cb) resonance for PDF documents
         is_chroma_carrier = False
         chroma_coherence_arr = None
         res_chroma = None
@@ -177,7 +150,6 @@ class VerificationEngine:
             residual_arr = res_native
             has_intact_carrier = global_coherence >= 0.0008
 
-        # Dynamic Memory Management for U-Net: scale down only if image exceeds max_inference_dim (2048)
         needs_resize = max(h, w) > self.max_inference_dim
         if needs_resize:
             scale = self.max_inference_dim / float(max(h, w))
@@ -190,21 +162,18 @@ class VerificationEngine:
             infer_w, infer_h = w, h
             img_infer = img_bgr
 
-        # 2. Re-synthesize carrier lattice for U-Net detector input
         raw_carrier = generate_carrier_lattice(
             height=infer_h,
             width=infer_w,
             secret_key=self.secret_key,
             period=self.period,
             channels=1,
-        ) # (H, W, 1)
+        )
 
-        # 3. Convert to PyTorch float32 tensors normalized to [0, 1]
         img_rgb = cv2.cvtColor(img_infer, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-        img_tensor = torch.from_numpy(img_rgb.transpose(2, 0, 1)).unsqueeze(0).to(self.device) # (1, 3, H, W)
-        carrier_tensor = torch.from_numpy(raw_carrier.transpose(2, 0, 1)).unsqueeze(0).float().to(self.device) # (1, 1, H, W)
+        img_tensor = torch.from_numpy(img_rgb.transpose(2, 0, 1)).unsqueeze(0).to(self.device)
+        carrier_tensor = torch.from_numpy(raw_carrier.transpose(2, 0, 1)).unsqueeze(0).float().to(self.device)
 
-        # 4. Neural Network Inference with FP16 Autocast & automatic CUDA OOM fallback
         use_amp = (self.device.type == "cuda")
         try:
             with torch.inference_mode():
@@ -225,15 +194,13 @@ class VerificationEngine:
             else:
                 raise e
 
-        prob_heatmap = prob_mask.squeeze().float().cpu().numpy() # (infer_h, infer_w) in [0, 1]
+        prob_heatmap = prob_mask.squeeze().float().cpu().numpy()
         residual_arr = intermediates["residual"].squeeze().float().cpu().numpy()
         coherence_arr = intermediates["coherence"].squeeze().float().cpu().numpy()
 
-        # If resized for inference, restore prob_heatmap to original image resolution
         if needs_resize:
             prob_heatmap = cv2.resize(prob_heatmap, (w, h), interpolation=cv2.INTER_LINEAR)
 
-        # Always preserve pristine native arrays
         if is_chroma_carrier:
             coherence_arr = chroma_coherence_arr
             residual_arr = res_chroma
@@ -241,21 +208,17 @@ class VerificationEngine:
             coherence_arr = native_coherence_arr
             residual_arr = res_native
 
-        # 5. Hybrid Verification & Connected Component Extraction
         total_image_pixels = w * h
 
-        # Natural document edge gradient map for stroke / boundary differentiation
         gray_u8 = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
         sobelx = cv2.Sobel(gray_u8, cv2.CV_32F, 1, 0, ksize=3)
         sobely = cv2.Sobel(gray_u8, cv2.CV_32F, 0, 1, ksize=3)
         edge_mag = np.sqrt(sobelx**2 + sobely**2) / 255.0
 
-        # Carrier Presence: global_coherence >= 0.0008 indicates active cryptographic carrier resonance
         has_intact_carrier = global_coherence >= 0.0008
 
         bin_mask = (prob_heatmap >= self.threshold).astype(np.uint8) * 255
         
-        # Morphological closing to group nearby character strokes
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
         closed_mask = cv2.morphologyEx(bin_mask, cv2.MORPH_CLOSE, kernel)
 
@@ -265,7 +228,6 @@ class VerificationEngine:
         annotated_bgr = img_bgr.copy()
         confident_tampered_pixels = 0
 
-        # In Chroma Carrier Mode: Direct Demodulation of Carrier Erasure (Whiteouts, Text replacements)
         if is_chroma_carrier:
             sign_match = (np.sign(residual_arr) == np.sign(native_carrier)).astype(np.float32)
             smoothed_sign_16 = cv2.boxFilter(sign_match, -1, (16, 16))
@@ -309,35 +271,24 @@ class VerificationEngine:
             bx, by, bw, bh = cv2.boundingRect(cnt)
             box_area = bw * bh
 
-            # Reject whole-canvas bounding boxes (baseline background shifts or noise merges)
             if box_area > 0.50 * total_image_pixels or area > 0.40 * total_image_pixels:
                 continue
 
-            # Compute mean confidence inside this candidate bounding box
             patch_prob = prob_heatmap[by : by + bh, bx : bx + bw]
             patch_conf = float(np.mean(patch_prob)) if patch_prob.size > 0 else 0.0
 
-            # Require confidence above detection threshold to avoid false alarms
             min_conf = max(0.55, self.threshold)
             if patch_conf < min_conf:
                 continue
 
-            # Physical Carrier Resonance & Edge Discontinuity Validation:
-            # When the document possesses active carrier resonance, verify whether the
-            # carrier lattice was genuinely destroyed inside this candidate box.
             patch_coherence = float(np.mean(coherence_arr[by : by + bh, bx : bx + bw]))
             patch_edge = float(np.mean(edge_mag[by : by + bh, bx : bx + bw]))
 
-            # 1. Physics Guarantee: If local carrier resonance is positive (>= 0.0005),
-            # the secret-keyed lattice is alive and continuous. An attacker without the secret key
-            # cannot forge text while preserving positive carrier phase resonance.
             if is_chroma_carrier and patch_coherence >= 0.10:
                 continue
             if not is_chroma_carrier and has_intact_carrier and patch_coherence >= 0.0005:
                 continue
 
-            # 2. Natural Ink Stroke Filter: Reject isolated character edge spikes (< 1500 px)
-            # that exhibit heavy edge gradient (> 0.30) caused by natural font contrast.
             if has_intact_carrier and box_area < 1500 and patch_edge > 0.30:
                 continue
 
@@ -352,7 +303,6 @@ class VerificationEngine:
                 "confidence": float(patch_conf),
             })
 
-            # Draw prominent red bounding box on annotated image
             cv2.rectangle(annotated_bgr, (bx, by), (bx + bw, by + bh), (0, 0, 255), 2)
             label = f"FORGED {patch_conf * 100:.1f}%"
             cv2.putText(
@@ -366,7 +316,6 @@ class VerificationEngine:
                 cv2.LINE_AA,
             )
 
-        # 6. Hybrid Decision Logic (Approach B)
         has_localized_tamper = len(bboxes) > 0
 
         if has_localized_tamper:
@@ -374,12 +323,10 @@ class VerificationEngine:
             is_tampered = True
             overall_conf = max([b["confidence"] for b in bboxes])
         elif has_intact_carrier:
-            # Carrier resonance is confirmed and no localized forgeries detected
             status = "AUTHENTIC"
             is_tampered = False
             overall_conf = 0.99
         else:
-            # Carrier resonance is missing or negative (unprotected image or wrong secret key)
             status = "UNVERIFIED"
             is_tampered = False
             overall_conf = 0.0
@@ -409,26 +356,13 @@ class VerificationEngine:
         input_pdf: Union[str, Path, bytes, io.BytesIO],
         dpi: int = DEFAULT_PDF_DPI,
     ) -> Dict[str, Any]:
-        """
-        Performs zero-reference forensic verification across all pages of a PDF document.
-        Inspects each page sequentially, identifying and localizing any altered text,
-        modified numbers, or forged signatures page-by-page.
-
-        Returns:
-        --------
-        audit_report : dict
-            {
-                "status": "AUTHENTIC" | "TAMPERED" | "UNVERIFIED",
-                "is_tampered": bool,
-                "file_type": "pdf",
-                "total_pages": int,
-                "tampered_pages_count": int,
-                "overall_confidence": float,
-                "execution_time_ms": float,
-                "pages": list of per-page verification dicts,
-            }
-        """
         t0 = time.time()
+
+        vector_res = PDFEngine.verify_vector_pdf(input_pdf, secret_key=self.secret_key, dpi=dpi)
+        if vector_res is not None:
+            vector_res["execution_time_ms"] = (time.time() - t0) * 1000.0
+            return vector_res
+
         rendered_pages = PDFEngine.render_pdf_to_pages(input_pdf, dpi=dpi)
 
         page_results = []
@@ -480,31 +414,21 @@ class VerificationEngine:
         }
 
     def generate_diagnostic_board(self, result: Dict) -> np.ndarray:
-        """
-        Create a high-impact 4-panel side-by-side forensic visualization:
-        [ Questioned Annotated | High-Freq Residual | Coherence Demod | Tamper Heatmap Overlay ]
-        """
         orig_annotated = result["annotated_bgr"]
         h, w = orig_annotated.shape[:2]
 
-        # 1. Amplified Residual (display high-frequency differences)
         res = result["residual"]
         res_norm = np.clip((res + 0.1) / 0.2 * 255.0, 0, 255).astype(np.uint8)
         res_bgr = cv2.cvtColor(res_norm, cv2.COLOR_GRAY2BGR)
 
-        # 2. Phase Demodulation Coherence
         coh = result["coherence"]
         coh_norm = np.clip((coh + 0.05) / 0.1 * 255.0, 0, 255).astype(np.uint8)
         coh_bgr = cv2.applyColorMap(coh_norm, cv2.COLORMAP_VIRIDIS)
 
-        # 3. Tamper Probability Heatmap Overlay
         prob_heat = (result["prob_heatmap"] * 255.0).astype(np.uint8)
         heat_color = cv2.applyColorMap(prob_heat, cv2.COLORMAP_JET)
-        # Alpha blend with original
         overlay_bgr = cv2.addWeighted(result["original_bgr"], 0.6, heat_color, 0.4, 0)
 
-        # Assemble 2x2 or 1x4 board
-        # Standard: 2x2 grid with header banners
         def add_banner(img, title, color=(0, 0, 0)):
             canvas = img.copy()
             cv2.rectangle(canvas, (0, 0), (w, 28), color, -1)
@@ -522,7 +446,6 @@ class VerificationEngine:
         board = np.vstack([top_row, bot_row])
 
         return board
-
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -580,7 +503,6 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     return parser.parse_args(argv)
 
-
 def run_cli(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
     in_path = Path(args.input)
@@ -608,7 +530,6 @@ def run_cli(argv: Optional[List[str]] = None) -> int:
 
     result = engine.verify_image(in_path)
 
-    # Status formatting
     is_tampered = result["is_tampered"]
     status_tag = "[!] TAMPER DETECTED (FORGERY)" if is_tampered else "[OK] AUTHENTIC DOCUMENT"
 
@@ -625,7 +546,6 @@ def run_cli(argv: Optional[List[str]] = None) -> int:
         for idx, box in enumerate(result["bboxes"], 1):
             print(f"    Region #{idx}: x={box['x']}, y={box['y']}, w={box['width']}, h={box['height']} (Conf: {box['confidence']*100:.1f}%)")
 
-    # Generate and save diagnostic board
     if args.output:
         board = engine.generate_diagnostic_board(result)
         out_p = Path(args.output)
@@ -633,7 +553,6 @@ def run_cli(argv: Optional[List[str]] = None) -> int:
         cv2.imwrite(str(out_p), board)
         print(f"\n  Diagnostic Board Saved : {out_p}")
 
-    # Save JSON report if requested
     if args.report:
         report_data = {
             "input_file": in_path.name,
@@ -653,7 +572,6 @@ def run_cli(argv: Optional[List[str]] = None) -> int:
 
     print("=" * 70)
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(run_cli())

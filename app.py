@@ -1,13 +1,3 @@
-"""
-DocSafe: Enterprise Document Integrity & AI Tamper Detection Platform
-======================================================================
-Modern SaaS Web Application with Collapsible Navigation,
-Live Document-Scanning & Protection Infusion Consoles,
-and Zero-Reference AI Tamper Detection Workspace.
-
-DocSafe Platform v1.0
-"""
-
 import base64
 import io
 import json
@@ -17,7 +7,6 @@ import time
 import types
 from pathlib import Path
 
-# Automatic self-resolving path: supports running from root or from inside docsafe
 CUR_DIR = Path(__file__).resolve().parent
 for p in [str(CUR_DIR), str(CUR_DIR.parent)]:
     if p not in sys.path:
@@ -41,11 +30,7 @@ from docsafe.core.lattice import derive_key_seed
 from docsafe.inference.protect import ProtectionEngine
 from docsafe.inference.verify import VerificationEngine
 
-# ==============================================================================
-# SVG ICON LIBRARY (Crisp, Linear Vector SVGs)
-# ==============================================================================
 def svg_icon(name: str, size: int = 18, color: str = "currentColor", stroke_width: float = 2.0) -> str:
-    """Returns clean inline SVG vector icon markup."""
     icons = {
         "shield": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="{stroke_width}" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>''',
         "shield_check": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="{stroke_width}" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>''',
@@ -60,9 +45,6 @@ def svg_icon(name: str, size: int = 18, color: str = "currentColor", stroke_widt
     }
     return icons.get(name, "")
 
-# ==============================================================================
-# PAGE CONFIGURATION & STYLING
-# ==============================================================================
 st.set_page_config(
     page_title="DocSafe | Document Integrity Platform",
     page_icon="🛡️",
@@ -791,9 +773,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ==============================================================================
-# CONFIG INITIALIZATION
-# ==============================================================================
 if "cfg_secret_key" not in st.session_state:
     st.session_state["cfg_secret_key"] = "DocSafeKey2026"
 if "cfg_delta" not in st.session_state:
@@ -824,9 +803,6 @@ checkpoint_candidates = [
 available_ckpt = [p for p in checkpoint_candidates if Path(p).exists()]
 selected_ckpt = available_ckpt[0] if available_ckpt else None
 
-# ==============================================================================
-# VERTICAL COLLAPSIBLE SIDEBAR NAVIGATION
-# ==============================================================================
 with st.sidebar:
     st.markdown(
         """
@@ -899,12 +875,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-
-# ==============================================================================
-# ANIMATION HELPER FUNCTIONS (Live Cyber Protection & Real Document Scanner)
-# ==============================================================================
 def extract_preview_thumbnail_b64(file_bytes: bytes, is_pdf: bool, max_dim: int = 340) -> str:
-    """Extracts a lightweight base64 JPEG thumbnail of the uploaded PDF or image for animation."""
     try:
         if is_pdf:
             import fitz
@@ -929,7 +900,6 @@ def extract_preview_thumbnail_b64(file_bytes: bytes, is_pdf: bool, max_dim: int 
     return ""
 
 def get_protection_anim_html(thumb_b64: str = "") -> str:
-    """Returns dynamic HTML/CSS markup showing the user's actual document being infused with protection."""
     img_element = (
         f'<img src="data:image/jpeg;base64,{thumb_b64}" class="anim-protected-img-blur" />'
         if thumb_b64
@@ -951,7 +921,6 @@ def get_protection_anim_html(thumb_b64: str = "") -> str:
     """
 
 def get_verification_anim_html(thumb_b64: str = "") -> str:
-    """Returns dynamic HTML/CSS markup showing the user's actual document being laser scanned."""
     img_element = (
         f'<img src="data:image/jpeg;base64,{thumb_b64}" class="anim-scanned-img-blur" />'
         if thumb_b64
@@ -971,12 +940,7 @@ def get_verification_anim_html(thumb_b64: str = "") -> str:
     </div>
     """
 
-
-# ==============================================================================
-# VIEW 1: MODERN ANIMATED OVERVIEW (HOMEPAGE)
-# ==============================================================================
 if nav_selection == "Overview":
-    # Top project header on Homepage only
     st.markdown(
         """
         <div class="homepage-top-header">
@@ -1061,7 +1025,6 @@ if nav_selection == "Overview":
 
     st.write("")
 
-    # INTERACTIVE LIVE SIMULATOR WIDGET (Viva Showpiece)
     st.markdown(
         """
         <div class="demo-simulator">
@@ -1100,7 +1063,6 @@ if nav_selection == "Overview":
         unsafe_allow_html=True,
     )
 
-    # TWO BIG LAUNCH ACTION BUTTONS
     st.markdown("### 🚀 Ready to test? Choose an action below:")
     b_col1, b_col2 = st.columns(2)
     with b_col1:
@@ -1110,7 +1072,6 @@ if nav_selection == "Overview":
         if st.button("🔍 Open Authenticity Verification Tool", type="secondary", use_container_width=True):
             st.info("💡 Select **'🔍 Verify Authenticity'** from the left navigation sidebar to begin.")
 
-    # FOOTER (HOMEPAGE ONLY)
     st.markdown(
         """
         <div class="site-footer">
@@ -1121,10 +1082,6 @@ if nav_selection == "Overview":
         unsafe_allow_html=True,
     )
 
-
-# ==============================================================================
-# VIEW 2: PROTECT DOCUMENT WORKSPACE
-# ==============================================================================
 elif nav_selection == "Protect Document":
     st.markdown(
         """
@@ -1175,7 +1132,6 @@ elif nav_selection == "Protect Document":
                 do_protect_pdf = st.button("🛡️ Protect This PDF Now", type="primary", use_container_width=True)
 
             if do_protect_pdf:
-                # Display high-tech cyber shield animation on the actual uploaded document
                 thumb_b64 = extract_preview_thumbnail_b64(file_bytes, is_pdf=True)
                 anim_placeholder.markdown(get_protection_anim_html(thumb_b64), unsafe_allow_html=True)
                 try:
@@ -1215,7 +1171,6 @@ elif nav_selection == "Protect Document":
                     do_protect_img = st.button("🛡️ Protect This Image Now", type="primary", use_container_width=True)
 
                 if do_protect_img:
-                    # Display high-tech cyber shield animation on the actual uploaded image
                     thumb_b64 = extract_preview_thumbnail_b64(file_bytes, is_pdf=False)
                     anim_placeholder.markdown(get_protection_anim_html(thumb_b64), unsafe_allow_html=True)
                     try:
@@ -1241,7 +1196,6 @@ elif nav_selection == "Protect Document":
                     finally:
                         anim_placeholder.empty()
 
-    # Display Protected Results (PDF)
     if st.session_state.get("protect_mode") == "pdf" and "protected_pdf_summary" in st.session_state:
         pdf_sum = st.session_state["protected_pdf_summary"]
         st.markdown(
@@ -1277,7 +1231,6 @@ elif nav_selection == "Protect Document":
                 use_container_width=True,
             )
 
-    # Display Protected Results (Image)
     elif st.session_state.get("protect_mode") == "image" and "protected_img" in st.session_state:
         img_sum = st.session_state["protect_summary"]
         p_img = st.session_state["protected_img"]
@@ -1318,10 +1271,6 @@ elif nav_selection == "Protect Document":
                     use_container_width=True,
                 )
 
-
-# ==============================================================================
-# VIEW 3: VERIFY AUTHENTICITY WORKSPACE
-# ==============================================================================
 elif nav_selection == "Verify Authenticity":
     st.markdown(
         """
@@ -1372,7 +1321,6 @@ elif nav_selection == "Verify Authenticity":
                 do_verify_pdf = st.button("🔍 Check PDF Authenticity Now", type="primary", use_container_width=True)
 
             if do_verify_pdf:
-                # Display high-tech cyber laser scanner animation on the actual uploaded document
                 thumb_b64 = extract_preview_thumbnail_b64(file_bytes, is_pdf=True)
                 anim_placeholder.markdown(get_verification_anim_html(thumb_b64), unsafe_allow_html=True)
                 try:
@@ -1419,7 +1367,6 @@ elif nav_selection == "Verify Authenticity":
                     do_verify_img = st.button("🔍 Check Image Authenticity Now", type="primary", use_container_width=True)
 
                 if do_verify_img:
-                    # Display high-tech cyber laser scanner animation on the actual uploaded image
                     thumb_b64 = extract_preview_thumbnail_b64(file_bytes, is_pdf=False)
                     anim_placeholder.markdown(get_verification_anim_html(thumb_b64), unsafe_allow_html=True)
                     try:
@@ -1448,7 +1395,6 @@ elif nav_selection == "Verify Authenticity":
                     finally:
                         anim_placeholder.empty()
 
-    # Display PDF Verification Results
     v_mode = st.session_state.get("v_mode")
 
     if v_mode == "pdf" and "v_pdf_result" in st.session_state:
@@ -1552,7 +1498,6 @@ elif nav_selection == "Verify Authenticity":
                     use_container_width=True,
                 )
 
-    # Display Image Verification Results
     elif v_mode == "image" and "v_result" in st.session_state:
         res = st.session_state["v_result"]
         q_bgr = st.session_state["v_questioned"]
@@ -1654,10 +1599,6 @@ elif nav_selection == "Verify Authenticity":
                     use_container_width=True,
                 )
 
-
-# ==============================================================================
-# VIEW 4: SETTINGS & OPTIONS
-# ==============================================================================
 elif nav_selection == "Settings & Policy":
     key_svg = svg_icon("lock", size=18, color="#2563EB")
     shield_svg = svg_icon("shield", size=18, color="#2563EB")
@@ -1676,7 +1617,6 @@ elif nav_selection == "Settings & Policy":
         unsafe_allow_html=True,
     )
 
-    # 1. Organization Secret Key
     st.markdown(
         f"""
         <div class="setting-box">
@@ -1699,7 +1639,6 @@ elif nav_selection == "Settings & Policy":
         st.session_state["cfg_secret_key"] = new_key
         st.success("✓ Security key updated!")
 
-    # 2. Protection Shield Settings
     st.markdown(
         f"""
         <div class="setting-box">
@@ -1725,7 +1664,6 @@ elif nav_selection == "Settings & Policy":
         new_period = st.slider("Grid Spacing (Pixels)", min_value=4, max_value=16, value=int(st.session_state["cfg_period"]), step=2)
         st.session_state["cfg_period"] = new_period
 
-    # 3. Tamper Detection Sensitivity
     st.markdown(
         f"""
         <div class="setting-box">
@@ -1751,7 +1689,6 @@ elif nav_selection == "Settings & Policy":
         new_min_px = st.slider("Minimum Size (Pixels)", min_value=4, max_value=64, value=int(st.session_state["cfg_min_pixels"]), step=4)
         st.session_state["cfg_min_pixels"] = new_min_px
 
-    # 4. Processing Hardware
     st.markdown(
         f"""
         <div class="setting-box">

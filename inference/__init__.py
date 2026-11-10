@@ -1,8 +1,3 @@
-"""
-DocSafe: Inference & Deployment Engine
-==========================================
-"""
-
 from docsafe.inference.protect import ProtectionEngine
 from docsafe.inference.verify import VerificationEngine
 

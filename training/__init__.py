@@ -1,8 +1,3 @@
-"""
-DocSafe: Training & Optimization Engine
-===========================================
-"""
-
 from docsafe.training.loss import (
     FocalLoss,
     DiceLoss,

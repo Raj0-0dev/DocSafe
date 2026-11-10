@@ -1,17 +1,13 @@
-# Python bytecode & cache
 __pycache__/
 *.py[cod]
 *$py.class
 *.pyc
 
-# Virtual environments
 venv/
 env/
 .env
 
-# System & IDE files
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
-

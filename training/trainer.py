@@ -1,15 +1,3 @@
-"""
-DocSafe: Deep Learning Training & Optimization Engine
-=========================================================
-Submodule 5.2: TamperDetectorTrainer
-Orchestrates model optimization with:
-- AdamW optimizer & Cosine Annealing learning rate schedule
-- Gradient clipping (L2 norm) for numerical stability
-- Compound loss tracking (Focal + Dice)
-- Model checkpointing & best-weight preservation
-- Device-agnostic execution (NVIDIA CUDA / Apple MPS / Multi-threaded CPU)
-"""
-
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
@@ -20,23 +8,7 @@ from torch.utils.data import DataLoader
 
 from docsafe.training.loss import CompoundTamperLoss
 
-
 class TamperDetectorTrainer:
-    """
-    Submodule 5.2: Production-grade trainer for DocSafe Tamper Localization.
-    
-    Coordinates the training loop, gradient backpropagation, learning rate
-    scheduling, validation telemetry, and persistent weight checkpointing.
-    
-    Args:
-        model: nn.Module instance (e.g. DocSafeUNetDetector).
-        criterion: Loss function module (defaults to CompoundTamperLoss).
-        optimizer: PyTorch optimizer (defaults to AdamW with lr=1e-3, wd=1e-4).
-        scheduler: Optional learning rate scheduler.
-        device: 'cuda', 'cpu', or torch.device.
-        gradient_clip: Maximum L2 gradient norm for clipping (default: 1.0).
-        checkpoint_dir: Directory path where weights are saved.
-    """
 
     def __init__(
         self,
@@ -57,7 +29,6 @@ class TamperDetectorTrainer:
 
         self.model = model.to(self.device)
 
-        # Detector output passes through Sigmoid in SegmentationHead, so from_logits=False
         if criterion is None:
             self.criterion = CompoundTamperLoss(
                 alpha=0.75,
@@ -94,15 +65,6 @@ class TamperDetectorTrainer:
         self.best_val_loss = float("inf")
 
     def train_step(self, batch: dict) -> Tuple[float, Dict[str, float]]:
-        """
-        Execute a single forward-backward optimization step on a mini-batch.
-        
-        Args:
-            batch: Dictionary with 'image', 'carrier', 'mask'.
-            
-        Returns:
-            Tuple of (scalar_loss_float, metrics_dict).
-        """
         self.model.train()
         self.optimizer.zero_grad()
 
@@ -110,34 +72,20 @@ class TamperDetectorTrainer:
         carriers = batch["carrier"].to(self.device)
         masks = batch["mask"].to(self.device)
 
-        # Forward pass
         preds = self.model(images, carriers)
 
-        # Loss calculation
         loss, loss_dict = self.criterion(preds, masks, return_dict=True)
 
-        # Backward propagation
         loss.backward()
 
-        # Gradient clipping
         if self.gradient_clip > 0.0:
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.gradient_clip)
 
-        # Optimizer update
         self.optimizer.step()
 
         return loss.item(), loss_dict
 
     def train_epoch(self, dataloader: DataLoader) -> Dict[str, float]:
-        """
-        Execute training across one complete epoch of data.
-        
-        Args:
-            dataloader: DataLoader streaming training batches.
-            
-        Returns:
-            Dictionary of averaged epoch training metrics.
-        """
         self.model.train()
         running_total = 0.0
         running_focal = 0.0
@@ -170,15 +118,6 @@ class TamperDetectorTrainer:
 
     @torch.no_grad()
     def validate_epoch(self, dataloader: DataLoader) -> Dict[str, float]:
-        """
-        Evaluate model performance on an unseen validation dataset without gradient computation.
-        
-        Args:
-            dataloader: DataLoader streaming validation batches.
-            
-        Returns:
-            Dictionary of averaged validation metrics.
-        """
         self.model.eval()
         running_total = 0.0
         running_focal = 0.0
@@ -214,18 +153,6 @@ class TamperDetectorTrainer:
         epochs: int = 5,
         verbose: bool = True,
     ) -> Dict[str, List[float]]:
-        """
-        Run the complete training curriculum.
-        
-        Args:
-            train_loader: Training DataLoader.
-            val_loader: Optional validation DataLoader.
-            epochs: Total number of epochs to train.
-            verbose: If True, prints epoch progress and metrics.
-            
-        Returns:
-            Training history dictionary.
-        """
         for epoch in range(1, epochs + 1):
             train_m = self.train_epoch(train_loader)
 
@@ -234,7 +161,6 @@ class TamperDetectorTrainer:
                 val_m = self.validate_epoch(val_loader)
                 val_str = f" | Val Loss: {val_m['loss']:.4f}"
 
-                # Check if this is the best checkpoint
                 if val_m["loss"] < self.best_val_loss:
                     self.best_val_loss = val_m["loss"]
                     self.save_checkpoint(
@@ -255,7 +181,6 @@ class TamperDetectorTrainer:
                     f"{val_str}"
                 )
 
-        # Save latest checkpoint at the end
         self.save_checkpoint(epoch=epochs, filename="latest_checkpoint.pth")
         return self.history
 
@@ -265,9 +190,6 @@ class TamperDetectorTrainer:
         filename: str = "checkpoint.pth",
         extra_info: Optional[dict] = None,
     ) -> Path:
-        """
-        Serialize model weights, optimizer, and training state to disk.
-        """
         save_path = self.checkpoint_dir / filename
         state = {
             "epoch": epoch,
@@ -282,9 +204,6 @@ class TamperDetectorTrainer:
         return save_path
 
     def load_checkpoint(self, filepath: Union[str, Path]) -> dict:
-        """
-        Restore model weights, optimizer, and training telemetry from disk.
-        """
         path = Path(filepath)
         if not path.exists():
             raise FileNotFoundError(f"Checkpoint file not found: {path}")

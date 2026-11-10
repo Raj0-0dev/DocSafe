@@ -1,9 +1,3 @@
-"""
-DocSafe Core Module
-======================
-High-performance cryptographic carrier lattice engine and protection APIs.
-"""
-
 from docsafe.core.lattice import (
     derive_key_seed,
     generate_carrier_lattice,

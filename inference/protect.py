@@ -1,17 +1,27 @@
-"""
-DocSafe: Protection Engine & CLI
-===================================
-Submodule 6.1: Standalone CLI and API for invisibly protecting digital documents
-and images by injecting the deterministic cryptographic carrier lattice.
-"""
-
 import argparse
+import io
 import json
+import os
 import sys
 import time
+import types
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
-import io
+
+CUR_DIR = Path(__file__).resolve().parent
+ROOT_DIR = CUR_DIR.parent
+for p in [str(ROOT_DIR), str(ROOT_DIR.parent)]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+if "docsafe" not in sys.modules:
+    try:
+        import docsafe
+    except ModuleNotFoundError:
+        _pkg = types.ModuleType("docsafe")
+        _pkg.__path__ = [str(ROOT_DIR)]
+        sys.modules["docsafe"] = _pkg
+
 import cv2
 import numpy as np
 
@@ -26,12 +36,7 @@ from docsafe.core.pdf_engine import (
     DEFAULT_PDF_DPI,
 )
 
-
 class ProtectionEngine:
-    """
-    Submodule 6.1: Protection service for single images and batch directories.
-    Injects invisible, high-frequency carrier lattices with zero perceptual distortion.
-    """
 
     def __init__(
         self,
@@ -49,9 +54,6 @@ class ProtectionEngine:
         input_path: Union[str, Path, "np.ndarray"],
         output_path: Union[str, Path],
     ) -> dict:
-        """
-        Protect a single document or photo from a file path or in-memory array.
-        """
         import cv2
         import numpy as np
         from docsafe.core.lattice import inject_carrier_lattice
@@ -84,7 +86,6 @@ class ProtectionEngine:
                 period=self.period,
                 delta=self.delta,
             )
-        # Expose top-level convenience metrics
         metrics = summary.get("metrics", {})
         summary["psnr_db"] = metrics.get("psnr_db", 0.0)
         summary["ssim"] = metrics.get("ssim", 0.0)
@@ -97,9 +98,6 @@ class ProtectionEngine:
         output_dir: Union[str, Path],
         max_images: Optional[int] = None,
     ) -> List[dict]:
-        """
-        Recursively discover and protect all images in a folder.
-        """
         out_dir = Path(output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         return protect_batch(
@@ -117,66 +115,13 @@ class ProtectionEngine:
         output_pdf: Optional[Union[str, Path]] = None,
         dpi: int = DEFAULT_PDF_DPI,
     ) -> Dict[str, Any]:
-        """
-        Invisibly protects a multi-page PDF document by injecting the cryptographic
-        carrier lattice into each page while compiling a Searchable Dual-Layer PDF.
-        Preserves 100% text selection (Ctrl+A), searchability (Ctrl+F), and copying.
-
-        Returns:
-        --------
-        summary : dict
-            Contains status, page count, per-page metrics, and compiled PDF bytes.
-        """
-        # 1. Render all pages to high-res BGR arrays (sequential memory-safe)
-        pages = PDFEngine.render_pdf_to_pages(input_pdf, dpi=dpi)
-        text_metadata = PDFEngine.extract_text_layer(input_pdf)
-
-        protected_images = []
-        dimensions_pt = []
-        page_summaries = []
-
-        for p in pages:
-            prot_img, metrics = inject_carrier_lattice(
-                image=p["image_bgr"],
-                secret_key=self.secret_key,
-                period=self.period,
-                delta=self.delta,
-                chroma_mode=True,
-            )
-            protected_images.append(prot_img)
-            dimensions_pt.append((p["width_pt"], p["height_pt"]))
-            page_summaries.append({
-                "page_index": p["page_index"],
-                "resolution": f"{p['width_px']}x{p['height_px']}",
-                "psnr_db": float(metrics.get("psnr_db", 0.0)),
-                "ssim": float(metrics.get("ssim", 0.0)),
-                "max_delta": float(metrics.get("max_abs_diff", metrics.get("max_pixel_delta", 1.0))),
-            })
-
-        # 2. Compile Dual-Layer Searchable PDF
-        pdf_bytes = PDFEngine.compile_dual_layer_pdf(
-            protected_pages_bgr=protected_images,
-            text_metadata_per_page=text_metadata,
-            page_dimensions_pt=dimensions_pt,
+        pdf_bytes, summary = PDFEngine.seal_vector_pdf(
+            pdf_source=input_pdf,
+            secret_key=self.secret_key,
             output_path=output_pdf,
-            dpi=dpi,
         )
-
-        avg_psnr = float(np.mean([m["psnr_db"] for m in page_summaries])) if page_summaries else 0.0
-        avg_ssim = float(np.mean([m["ssim"] for m in page_summaries])) if page_summaries else 0.0
-
-        return {
-            "status": "success",
-            "file_type": "pdf",
-            "total_pages": len(pages),
-            "dpi": dpi,
-            "avg_psnr_db": avg_psnr,
-            "avg_ssim": avg_ssim,
-            "pages": page_summaries,
-            "pdf_bytes": pdf_bytes,
-            "output_pdf_path": str(output_pdf) if output_pdf else None,
-        }
-
+        summary["output_pdf_path"] = str(output_pdf) if output_pdf else None
+        return summary
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -216,7 +161,6 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     return parser.parse_args(argv)
 
-
 def run_cli(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
     in_path = Path(args.input)
@@ -240,7 +184,6 @@ def run_cli(argv: Optional[List[str]] = None) -> int:
     print("-" * 70)
 
     if in_path.is_file():
-        # Single image protection
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         print(f"  Protecting single file: {in_path.name}")
@@ -257,7 +200,6 @@ def run_cli(argv: Optional[List[str]] = None) -> int:
         return 0
 
     elif in_path.is_dir():
-        # Batch directory protection
         out_dir = Path(args.output)
         out_dir.mkdir(parents=True, exist_ok=True)
         print(f"  Protecting batch directory: {in_path}")
@@ -286,7 +228,6 @@ def run_cli(argv: Optional[List[str]] = None) -> int:
     else:
         print(f"Error: Unknown path type: {args.input}", file=sys.stderr)
         return 1
-
 
 if __name__ == "__main__":
     sys.exit(run_cli())
